@@ -28,22 +28,17 @@ app.post('/api/users', async (req, res) => {
   try {
     const { username } = req.body;
 
-    // Check if username is provided
-    if (!username) {
-      return res.status(400).json({ error: 'Username is required' });
-    }
+    if (!username) return res.status(400).json({ error: 'Username is required' });
 
-    // Create and save the new user
     const newUser = new User({ username });
     const savedUser = await newUser.save();
 
-    // Respond with the new user details
     res.json({
       username: savedUser.username,
       _id: savedUser._id
     });
   } catch (err) {
-    console.error(err);
+    console.error('Error in creating user:', err);
     res.status(500).json({ error: 'Server error while creating user' });
   }
 });
@@ -54,7 +49,7 @@ app.get('/api/users', async (req, res) => {
     const users = await User.find();
     res.json(users);
   } catch (err) {
-    console.error(err);
+    console.error('Error in fetching users:', err);
     res.status(500).json({ error: 'Server error while fetching users' });
   }
 });
@@ -70,7 +65,6 @@ app.post('/api/users/:id/exercises', async (req, res) => {
       return res.status(400).json({ error: 'Description and duration are required' });
     }
 
-    // Use the current date if no date is provided
     const exerciseDate = date ? new Date(date).toDateString() : new Date().toDateString();
 
     // Create and save the new exercise
@@ -92,7 +86,7 @@ app.post('/api/users/:id/exercises', async (req, res) => {
     user.exercises.push(savedExercise);
     await user.save();
 
-    // Respond with the user's exercise details
+    // Respond with the user's exercise details (correct format)
     res.json({
       _id: user._id,
       username: user.username,
@@ -101,14 +95,53 @@ app.post('/api/users/:id/exercises', async (req, res) => {
       date: savedExercise.date
     });
   } catch (err) {
-    // Handle Mongoose validation errors
-    if (err.name === 'ValidationError') {
-      console.error('Validation Error:', err);
-      return res.status(400).json({ error: 'Validation Error', details: err.message });
+    console.error('Error while adding exercise:', err);
+    res.status(500).json({ error: 'Server error while adding exercise' });
+  }
+});
+
+// Get the exercise log for a specific user (GET request)
+app.get('/api/users/:id/logs', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { from, to, limit } = req.query;
+
+    // Find the user by ID
+    const user = await User.findById(id).populate('exercises');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    console.error(err);
-    res.status(500).json({ error: 'Server error while adding exercise' });
+    let exercises = user.exercises;
+
+    // Filter by date range if `from` and `to` are provided
+    if (from) {
+      exercises = exercises.filter((exercise) => new Date(exercise.date) >= new Date(from));
+    }
+
+    if (to) {
+      exercises = exercises.filter((exercise) => new Date(exercise.date) <= new Date(to));
+    }
+
+    // Limit the number of exercises if `limit` is provided
+    if (limit) {
+      exercises = exercises.slice(0, limit);
+    }
+
+    // Return the user's log with a count of exercises
+    res.json({
+      _id: user._id,
+      username: user.username,
+      count: exercises.length,
+      log: exercises.map(exercise => ({
+        description: exercise.description,
+        duration: exercise.duration,
+        date: exercise.date
+      }))
+    });
+  } catch (err) {
+    console.error('Error while fetching user log:', err);
+    res.status(500).json({ error: 'Server error while fetching log' });
   }
 });
 
